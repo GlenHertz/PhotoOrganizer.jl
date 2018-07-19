@@ -1,4 +1,4 @@
-The PhotoBackup.jl package is licensed under the MIT "Expat" License:
+The OrganizePhotos.jl package is licensed under the MIT "Expat" License:
 
 > Copyright (c) 2018: Glen Hertz.
 >
