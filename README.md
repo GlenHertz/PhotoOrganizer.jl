@@ -31,7 +31,7 @@ where `season` is `Spring`, `Summer`, `Fall` or `Winter` (depending of photo's d
 ```julia
 julia> rm_src=false
 julia> dry_run=true
-julia> backup_photos(["/media/hertz/NIKON/DCIM"], "/home/hertz/Pictures/Pictures", rm_src, dry_run)
+julia> organize_photos(["/media/hertz/NIKON/DCIM"], "/home/hertz/Pictures/Pictures", rm_src, dry_run)
 ```
 
 ## Dependencies
