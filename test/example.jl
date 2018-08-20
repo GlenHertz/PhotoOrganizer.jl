@@ -1,8 +1,7 @@
-using PhotoBackup
+using PhotoOrganizer
 
-dry_run = !(length(ARGS) == 1 && ARGS[1] == "-f")
-dry_run = true
-keep_years_old=99999999999
+dry_run = false
+rm_src = false
 dst_root="/home/hertz/Pictures/Pictures"
 
 src_dirs = String[]
@@ -14,7 +13,7 @@ src_dirs = String[]
 
 src_dirs = ["/home/hertz/Documents.local/Pictures"]
 if length(src_dirs) > 0
-    backup_photos(src_dirs, dst_root, keep_years_old, dry_run)
+    organize_photos(src_dirs, dst_root, rm_src, dry_run)
 else
     warn("No directories found to backup")
 end
