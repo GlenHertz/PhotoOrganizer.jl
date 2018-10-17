@@ -23,6 +23,9 @@ function Base.show(io::IO, ph::Photo)
    end
 end
 
+const dt0 = now()
+const ms_in_year = Dates.Millisecond(daysinyear(Dates.year(dt0)) * 24 * 60 * 60 * 1000)
+
 function get_photo_dst_dir(dt::DateTime, dst_root::String)
    y, m, d = yearmonthday(dt)
    spring = Date(y, 3, 20)
@@ -44,10 +47,37 @@ function get_photo_dst_dir(dt::DateTime, dst_root::String)
    error("Could not find season for $dt")
 end
 
+function resolve_photo_date(date, modifydate, filemodifydate)
+      if date == "-"
+         date = modifydate
+      end
+      if date == "-"
+         date = filemodifydate
+      end
+      fields = split(date, [':', ' ', '-', '+', 'Z'])
+      yr, m, d, H, M, S = (0, 0, 0, 0, 0, 0)
+      try
+         yr, m, d, H, M, S = map(str -> parse(Int, str), fields[1:6])
+      catch err
+         throw(ArgumentError("Could not parse date: $fields, $err"))
+      end
+      if !(1990 < yr < 2100)
+         throw(DomainError("year out of range ($yr), skipping: $line"))
+      end
+      if !(0 <= H <= 23)
+         throw(DomainError("hour out of range ($H), skipping: $line"))
+      end
+      if !(0 <= M <= 59)
+         throw(DomainError("minute out of range ($M), skipping: $line"))
+      end
+      if !(0 <= S <= 59)
+         throw(DomainError("second out of range ($S), skipping: $line"))
+      end
+      return (yr, m, d, H, M, S)
+end
+
 function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run::Bool)
    album = Vector{Photo}()
-   dt0 = now()
-   ms_in_year = Dates.Millisecond(daysinyear(Dates.year(dt0)) * 24 * 60 * 60 * 1000)
    if !isdir(mount)
        @warn "Mount doesn't exist, skipping:" mount
        return album
@@ -64,50 +94,18 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
          continue
       end
       src = joinpath(dir, fname)
-      dtnull = missing
-      dstnull = missing
       backuped = false
       errmsg = missing
+      dtmissing = missing
+      dstmissing = missing
       print(src)
-      if date == "-"
-         date = modifydate
-      end
-      if date == "-"
-         date = filemodifydate
-      end
-      fields = split(date, [':', ' ', '-', '+', 'Z'])
-         yr, m, d, H, M, S = (0, 0, 0, 0, 0, 0)
+      local yr, m, d, H, M, S
       try
-         yr, m, d, H, M, S = map(str -> parse(Int, str), fields[1:6])
+      	yr, m, d, H, M, S = resolve_photo_date(date, modifydate, filemodifydate)
       catch err
-         errmsg = "Could not parse date: $fields, $err"
-         @warn(errmsg)
-         push!(album, Photo(src, dtnull, dstnull, backuped, errmsg))
-         continue
-      end
-      if !(1990 < yr < 2100)
-         errmsg = "year out of range ($yr), skipping: $line"
-         @warn(errmsg)
-         push!(album, Photo(src, dtnull, dstnull, backuped, errmsg))
-         continue
-      end
-      if !(0 <= H <= 23)
-         errmsg = "hour out of range ($H), skipping: $line"
-         @warn(errmsg)
-         push!(album, Photo(src, dtnull, dstnull, backuped, errmsg))
-         continue
-      end
-      if !(0 <= M <= 59)
-         errmsg = "minute out of range ($M), skipping: $line"
-         @warn(errmsg)
-         push!(album, Photo(src, dtnull, dstnull, backuped, errmsg))
-         continue
-      end
-      if !(0 <= S <= 59)
-         errmsg = "second out of range ($S), skipping: $line"
-         @warn(errmsg)
-         push!(album, Photo(src, dtnull, dstnull, backuped, errmsg))
-         continue
+	 @warn(err)
+         push!(album, Photo(src, dtmissing, dstmissing, backuped, errmsg))
+	 continue
       end
       MS = 0
       if all(isnumeric, subsec)
@@ -115,7 +113,7 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
             MS = round(Int, parse(Float64, "0.$(subsec)")*1000)
          catch err
             @warn("Could not parse ms: $subsec, $err")
-            push!(album, Photo(src, dtnull, dstnull, backuped, errmsg))
+            push!(album, Photo(src, dtmissing, dstmissing, backuped, errmsg))
             continue
          end
       end
@@ -133,8 +131,8 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
                      lpad(MS, 3, "0"), camera)
       is_actual_dup = false
       is_rename_needed = false
-      local dst
-      for uniq_suffix in ["", map(v->string("_v$v"), 2:200)...]
+      local dst, uniq_suffix
+      for outer uniq_suffix in ["", map(v->string("_v$v"), 2:200)...]
          dst = joinpath(new_dir, string(froot, uniq_suffix, ext))
          if isfile(dst)
             if stat(src).size == stat(dst).size
@@ -209,7 +207,11 @@ function report_missing(mount_stats::Vector{MountStat})
      for mount_stat in mount_stats
         src_dir = mount_stat.mount
         if !isdir(src_dir)
-           @warn("Source directory doesn't exist, skipping: $src_dir")
+	   if src_dir == nothing
+	     @warn("Source directory doesn't exist, skipping: :nothing")
+           else
+	     @warn("Source directory doesn't exist, skipping: $src_dir")
+	   end
            continue
         end
         for file in eachline(`find $(src_dir) -type f`)

@@ -12,6 +12,19 @@ src_dirs = String[]
 #src_dirs = readlines(`/home/hertz/bin/ls_phone_backup_dirs.jl`)
 
 src_dirs = ["/home/hertz/Documents.local/Pictures"]
+src_root = "/home/hertz/Documents/backups/S7"
+src_dirs = [
+	    "$src_root/Card/DCIM/Camera",
+            "$src_root/Phone/DCIM/Camera",
+            "$src_root/Phone/DCIM/PhotoScan",
+            "$src_root/Phone/DCIM/Screenshots",
+            "$src_root/Phone/Movies/Instagram",
+            "$src_root/Phone/mysword",
+            "$src_root/Phone/Pictures",
+            "$src_root/Phone/Snapchat",
+            "$src_root/Phone/Snapseed",
+            "$src_root/Phone/WhatsApp/Media"]
+
 if length(src_dirs) > 0
     organize_photos(src_dirs, dst_root, rm_src, dry_run)
 else
