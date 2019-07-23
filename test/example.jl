@@ -13,18 +13,38 @@ src_dirs = String[]
 
 src_dirs = ["/home/hertz/Documents.local/Pictures"]
 src_root = "/home/hertz/Documents/backups/S7"
-src_dirs = [
-	    "$src_root/Card/DCIM/Camera",
-            "$src_root/Phone/DCIM/Camera",
-            "$src_root/Phone/DCIM/PhotoScan",
-            "$src_root/Phone/DCIM/Screenshots",
-            "$src_root/Phone/Movies/Instagram",
-            "$src_root/Phone/mysword",
-            "$src_root/Phone/Pictures",
-            "$src_root/Phone/Snapchat",
-            "$src_root/Phone/Snapseed",
-            "$src_root/Phone/WhatsApp/Media"]
-
+src_root = "/run/user/1000/gvfs/mtp:host=%5Busb%3A003%2C004%5D"
+user = "eh"
+if user == "gh"
+	src_root = "/var/run/user/1000/gvfs/mtp:host=%5Busb%3A002%2C009%5D"
+	src_dirs = [
+		    "$src_root/Card/DCIM/Camera",
+		    "$src_root/Phone/DCIM/Camera",
+		    "$src_root/Phone/DCIM/PhotoScan",
+		    "$src_root/Phone/DCIM/Screenshots",
+		    "$src_root/Phone/DCIM/Video Editor",
+		    "$src_root/Phone/Movies/Instagram",
+		    "$src_root/Phone/Pictures",
+		    "$src_root/Phone/Snapchat",
+		    "$src_root/Phone/Snapseed",
+		    "$src_root/Phone/Studio",
+		    "$src_root/Phone/Telegram",
+		    "$src_root/Phone/WhatsApp/Media"]
+elseif user == "eh"
+	src_root = "/var/run/user/1000/gvfs/mtp:host=%5Busb%3A002%2C011%5D/Internal shared storage"
+	src_dirs = [
+		    "$src_root/CameraZOOM",
+		    "$src_root/DCIM",
+		    "$src_root/Movies",
+		    "$src_root/Pictures",
+		    "$src_root/Phone/DCIM/Screenshots",
+		    "$src_root/Phone/DCIM/Video Editor",
+		    "$src_root/Phone/Movies/Instagram",
+		    "$src_root/SlowMotion",
+		    "$src_root/Snapchat",
+		    "$src_root/Telegram",
+		    "$src_root/WhatsApp/Media"]
+end
 if length(src_dirs) > 0
     organize_photos(src_dirs, dst_root, rm_src, dry_run)
 else

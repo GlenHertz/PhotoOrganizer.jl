@@ -47,7 +47,7 @@ function get_photo_dst_dir(dt::DateTime, dst_root::String)
    error("Could not find season for $dt")
 end
 
-function resolve_photo_date(date, modifydate, filemodifydate)
+function resolve_photo_date(line, date, modifydate, filemodifydate)
       if date == "-"
          date = modifydate
       end
@@ -76,7 +76,7 @@ function resolve_photo_date(date, modifydate, filemodifydate)
       return (yr, m, d, H, M, S)
 end
 
-function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run::Bool)
+function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run::Bool, suffix::String)
    album = Vector{Photo}()
    if !isdir(mount)
        @warn "Mount doesn't exist, skipping:" mount
@@ -87,8 +87,9 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
    else
       @info("Reading from dir: $mount")
    end
-   for line in eachline(Cmd(`exiftool -T -directory -filename -CreateDate -SubSecTime -modifydate -filemodifydate -model -r $mount`, ignorestatus=true))
-      dir, fname, date, subsec, modifydate, filemodifydate, camera = split(line, ['\t'])
+   for line in eachline(Cmd(`exiftool -T -Make -directory -filename -CreateDate -CreationDate -SubSecTime -SubSecCreateDate -modifydate -filemodifydate -model -r $mount`, ignorestatus=true))
+      make, dir, fname, date, date2, subsec, subsec2, modifydate, filemodifydate, camera = split(line, ['\t'])
+      #@show make, dir, fname, date, date2, subsec, subsec2, modifydate, filemodifydate, camera
       if dir == "-"
          @warn("Bad SourceFile from exiftool: $line")
          continue
@@ -101,11 +102,16 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
       print(src)
       local yr, m, d, H, M, S
       try
-      	yr, m, d, H, M, S = resolve_photo_date(date, modifydate, filemodifydate)
+        if make == "APPLE"
+           if date2 != "-"
+              #@show date = date2
+           end
+        end
+        yr, m, d, H, M, S = resolve_photo_date(line, date, modifydate, filemodifydate)
       catch err
-	 @warn(err)
+         @warn(err)
          push!(album, Photo(src, dtmissing, dstmissing, backuped, errmsg))
-	 continue
+         continue
       end
       MS = 0
       if all(isnumeric, subsec)
@@ -114,6 +120,14 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
          catch err
             @warn("Could not parse ms: $subsec, $err")
             push!(album, Photo(src, dtmissing, dstmissing, backuped, errmsg))
+            continue
+         end
+      elseif occursin(".", subsec2)
+         try
+            MS = split(subsec2, '.')[end]
+            MS = round(Int, parse(Float64, "0.$MS")*1000)
+         catch err
+            @warn("Could not parse ms: $subsec2, $err")
             continue
          end
       end
@@ -128,7 +142,7 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
       end
       froot = string(lpad(yr, 4, "0"), lpad(m, 2, "0"), lpad(d, 2, "0"), "_", 
                      lpad(H,  2, "0"), lpad(M, 2, "0"), lpad(S, 2, "0"), ".",
-                     lpad(MS, 3, "0"), camera)
+                     lpad(MS, 3, "0"), camera, suffix)
       is_actual_dup = false
       is_rename_needed = false
       local dst, uniq_suffix
@@ -207,11 +221,11 @@ function report_missing(mount_stats::Vector{MountStat})
      for mount_stat in mount_stats
         src_dir = mount_stat.mount
         if !isdir(src_dir)
-	   if src_dir == nothing
-	     @warn("Source directory doesn't exist, skipping: :nothing")
+           if src_dir == nothing
+             @warn("Source directory doesn't exist, skipping: 'nothing'")
            else
-	     @warn("Source directory doesn't exist, skipping: $src_dir")
-	   end
+             @warn("Source directory doesn't exist, skipping: $src_dir")
+           end
            continue
         end
         for file in eachline(`find $(src_dir) -type f`)
@@ -219,7 +233,7 @@ function report_missing(mount_stats::Vector{MountStat})
               continue  # non-important file
            end
            matching_photo_idx = findfirst(photo-> photo.src == file, mount_stat.photos)
-           if matching_photo_idx != 0 
+           if matching_photo_idx ∉ [nothing, 0]
               photo = mount_stat.photos[matching_photo_idx]
               if !photo.backuped 
                  print(file)
@@ -248,7 +262,7 @@ function report_missing(mount_stats::Vector{MountStat})
 end
 
 """
-    organize_photos(src_dirs, dst_root, rm_src, dry_run)
+    organize_photos(src_dirs, dst_root; rm_src, dry_run)
 
 Move and rename photos in `src_dirs` source directories to an organized `dst_root` destination directory.
 
@@ -266,17 +280,17 @@ where `season` is `Spring`, `Summer`, `Fall` or `Winter` (depending of photo's d
 
 # Examples
 ```julia-repl
-julia> organize_photos(["/home/hertz/Documents.local/Pictures"], "/home/hertz/Pictures/Pictures", 9999, true)
+julia> organize_photos(["/home/hertz/Documents.local/Pictures"], "/home/hertz/Pictures/Pictures", rm_src=false, dry_run=true)
 ```
 """
-function organize_photos(src_dirs::Vector{String}, dst_root::String, rm_src::Bool, dry_run::Bool)
+function organize_photos(src_dirs::Vector{String}, dst_root::String; rm_src::Bool, dry_run::Bool, photo_suffix="")
     if dry_run
        @warn("DRY RUN: only printing what would happen")
     end
     mount_stats = Vector{MountStat}()
     for dir in src_dirs
        mount_stat = MountStat(dir, Photo[])
-       for photo in _organize_photos(dir, dst_root, rm_src, dry_run)
+       for photo in _organize_photos(dir, dst_root, rm_src, dry_run, photo_suffix)
           push!(mount_stat.photos, photo)
        end
        push!(mount_stats, mount_stat)
@@ -293,8 +307,8 @@ function organize_photos(src_dirs::Vector{String}, dst_root::String, rm_src::Boo
     end
 end
 
-function organize_photos(src_dir::String, args...)
-    organize_photos([src_dir], args...)
+function organize_photos(src_dir::String, dst_root::String; kwargs...)
+    organize_photos([src_dir], dst_root; kwargs...)
 end
 
 end # module
