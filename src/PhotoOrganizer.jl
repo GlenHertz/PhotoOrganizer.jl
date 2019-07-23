@@ -88,8 +88,8 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
       @info("Reading from dir: $mount")
    end
    for line in eachline(Cmd(`exiftool -T -Make -directory -filename -CreateDate -CreationDate -SubSecTime -SubSecCreateDate -modifydate -filemodifydate -model -r $mount`, ignorestatus=true))
-      make, dir, fname, date, date2, subsec, subsec2, modifydate, filemodifydate, camera = split(line, ['\t'])
-      #@show make, dir, fname, date, date2, subsec, subsec2, modifydate, filemodifydate, camera
+      pic = NamedTuple{(:make, :dir, :fname, :date, :date2, :subsec, :subsec2, :modifydate, :filemodifydate, :camera)}(split(line, ['\t']))
+      make, dir, fname, date, date2, subsec, subsec2, modifydate, filemodifydate, camera = pic
       if dir == "-"
          @warn("Bad SourceFile from exiftool: $line")
          continue
@@ -100,13 +100,13 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
       dtmissing = missing
       dstmissing = missing
       print(src)
+      if make == "Apple"
+         if date2 != "-"
+            date = date2
+         end
+      end
       local yr, m, d, H, M, S
       try
-        if make == "APPLE"
-           if date2 != "-"
-              #@show date = date2
-           end
-        end
         yr, m, d, H, M, S = resolve_photo_date(line, date, modifydate, filemodifydate)
       catch err
          @warn(err)
