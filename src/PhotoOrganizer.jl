@@ -1,5 +1,13 @@
 module PhotoOrganizer
 
+abstract type AbstractFileType end
+struct AnyFileType <: AbstractFileType end
+struct MP4 <: AbstractFileType end
+
+abstract type AbstractMake end
+struct AnyMake <: AbstractMake end
+struct Apple <: AbstractMake end
+
 export organize_photos
 
 using Dates
@@ -47,33 +55,65 @@ function get_photo_dst_dir(dt::DateTime, dst_root::String)
    error("Could not find season for $dt")
 end
 
-function resolve_photo_date(line, date, modifydate, filemodifydate)
-      if date == "-"
-         date = modifydate
-      end
-      if date == "-"
-         date = filemodifydate
-      end
+function parse_date(line, date)
       fields = split(date, [':', ' ', '-', '+', 'Z'])
       yr, m, d, H, M, S = (0, 0, 0, 0, 0, 0)
-      try
+      #try
          yr, m, d, H, M, S = map(str -> parse(Int, str), fields[1:6])
-      catch err
-         throw(ArgumentError("Could not parse date: $fields, $err"))
-      end
-      if !(1990 < yr < 2100)
-         throw(DomainError("year out of range ($yr), skipping: $line"))
+      #catch err
+      #   throw(ArgumentError("Could not parse date: $fields, $err"))
+      #end
+      if !(1980 < yr < 2100)
+         throw(DomainError("year out of range ($yr) for date ($date), skipping: $line"))
       end
       if !(0 <= H <= 23)
-         throw(DomainError("hour out of range ($H), skipping: $line"))
+         throw(DomainError("hour out of range ($H) for date ($date), skipping: $line"))
       end
       if !(0 <= M <= 59)
-         throw(DomainError("minute out of range ($M), skipping: $line"))
+         throw(DomainError("minute out of range ($M) for date ($date), skipping: $line"))
       end
       if !(0 <= S <= 59)
-         throw(DomainError("second out of range ($S), skipping: $line"))
+         throw(DomainError("second out of range ($S) for date ($date), skipping: $line"))
       end
       return (yr, m, d, H, M, S)
+end
+
+function resolve_photo_date(Make::AbstractMake, FileType::AbstractFileType, line, pic)
+      date = pic.date 
+		if date == "-" || startswith(date, "0000")
+         date = pic.modifydate
+      end
+      if date == "-" || startswith(date, "0000")
+         date = pic.filemodifydate
+      end
+      parse_date(line, date)
+end
+
+function resolve_photo_date(Make::Apple, FileType::AbstractFileType, line, pic)
+   date = pic.date
+	if pic.date2 != "-" && !startswith(pic.date2, "0000")
+      date = pic.date2
+   end
+	if date == "-" || startswith(date, "0000")
+      date = pic.filemodifydate
+   end
+   parse_date(line, date)
+end
+
+function resolve_make(pic)
+      if pic.make == "Apple" || pic.make2 == "Apple"
+         return Apple()
+      else
+         return AnyMake() 
+      end
+end
+
+function resolve_filetype(pic)
+      if pic.filetype == "MP4"
+         return MP4()
+      else
+         return AnyFileType()
+      end
 end
 
 function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run::Bool, suffix::String)
@@ -87,54 +127,52 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
    else
       @info("Reading from dir: $mount")
    end
-   for line in eachline(Cmd(`exiftool -T -Make -directory -filename -CreateDate -CreationDate -SubSecTime -SubSecCreateDate -modifydate -filemodifydate -model -r $mount`, ignorestatus=true))
-      pic = NamedTuple{(:make, :dir, :fname, :date, :date2, :subsec, :subsec2, :modifydate, :filemodifydate, :camera)}(split(line, ['\t']))
-      make, dir, fname, date, date2, subsec, subsec2, modifydate, filemodifydate, camera = pic
-      if dir == "-"
+   for line in eachline(Cmd(`exiftool -T -Make -HandlerVendorID -directory -filename -FileType -CreateDate -CreationDate -SubSecTime -SubSecCreateDate -modifydate -filemodifydate -model -r $mount`, ignorestatus=true))
+      pic = NamedTuple{(:make, :make2, :dir, :fname, :filetype, :date, :date2, :subsec, :subsec2, :modifydate, :filemodifydate, :camera)}(split(line, ['\t']))
+      #@show pic
+      if pic.dir == "-"
          @warn("Bad SourceFile from exiftool: $line")
          continue
       end
-      src = joinpath(dir, fname)
+      src = joinpath(pic.dir, pic.fname)
       backuped = false
       errmsg = missing
       dtmissing = missing
       dstmissing = missing
       print(src)
-      if make == "Apple"
-         if date2 != "-"
-            date = date2
-         end
-      end
-      local yr, m, d, H, M, S
-      try
-        yr, m, d, H, M, S = resolve_photo_date(line, date, modifydate, filemodifydate)
-      catch err
-         @warn(err)
-         push!(album, Photo(src, dtmissing, dstmissing, backuped, errmsg))
-         continue
-      end
+      local yr, m, d, H, M, S, Make, FileType
+      Make = resolve_make(pic)
+      FileType = resolve_filetype(pic)
+      #try
+        yr, m, d, H, M, S = resolve_photo_date(Make, FileType, line, pic)
+      #catch err
+      #   @warn(err)
+      #   push!(album, Photo(src, dtmissing, dstmissing, backuped, errmsg))
+      #   continue
+      #end
       MS = 0
-      if all(isnumeric, subsec)
-         try
-            MS = round(Int, parse(Float64, "0.$(subsec)")*1000)
-         catch err
-            @warn("Could not parse ms: $subsec, $err")
-            push!(album, Photo(src, dtmissing, dstmissing, backuped, errmsg))
-            continue
-         end
-      elseif occursin(".", subsec2)
-         try
-            MS = split(subsec2, '.')[end]
+      if all(isnumeric, pic.subsec)
+         #try
+            MS = round(Int, parse(Float64, "0.$(pic.subsec)")*1000)
+         #catch err
+         #   @warn("Could not parse ms: $(pic.subsec), $err")
+         #   push!(album, Photo(src, dtmissing, dstmissing, backuped, errmsg))
+         #   continue
+         #end
+      elseif occursin(".", pic.subsec2)
+         #try
+            MS = split(pic.subsec2, '.')[end]
             MS = round(Int, parse(Float64, "0.$MS")*1000)
-         catch err
-            @warn("Could not parse ms: $subsec2, $err")
-            continue
-         end
+         #catch err
+         #   @warn("Could not parse ms: $pic.subsec2, $err")
+         #   continue
+         #end
       end
       dt = DateTime(yr, m, d, H, M, S, MS)
       # Normalize name of new photo:
       ext = splitext(src)[2]
       new_dir = get_photo_dst_dir(dt, dst_root)
+		camera = pic.camera
       if camera == "-"
          camera = ""
       else
@@ -180,14 +218,14 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
       if !isfile(dst) && !is_actual_dup
           printstyled(" cp $dst", color=:green)
           if !dry_run
-              try
+              #try
                  #cp(src, dst, follow_symlinks=true)
                  run(`cp -dR --preserve=all $src $dst`)
                  backuped=true
-              catch err
-                 @warn("Cound not copy file: $src\n$err")
-                 continue
-              end
+              #catch err
+              #   @warn("Cound not copy file: $src\n$err")
+              #   continue
+              #end
           end
       else
          printstyled(" Skipping dup (already backed up)", color=:green)
@@ -197,11 +235,11 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
       if rm_src
           print(" rm src")
           if !dry_run
-              try
+              #try
                  rm(src)
-              catch err
+              #catch err
                  printstyled(" rm src failed: $err", bold=true, color=:red)
-              end 
+              #end 
           end
       end
       println()
