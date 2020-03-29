@@ -161,7 +161,7 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
          #end
       elseif occursin(".", pic.subsec2)
          #try
-            MS = split(pic.subsec2, '.')[end]
+            MS = split(split(pic.subsec2, '.')[end], "-")[1]
             MS = round(Int, parse(Float64, "0.$MS")*1000)
          #catch err
          #   @warn("Could not parse ms: $pic.subsec2, $err")
