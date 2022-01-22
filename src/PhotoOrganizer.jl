@@ -300,7 +300,7 @@ function report_missing(mount_stats::Vector{MountStat})
 end
 
 """
-    organize_photos(src_dirs, dst_root; rm_src, dry_run)
+    organize_photos(src_dirs, dst_root; rm_src, dry_run, photo_suffix)
 
 Move and rename photos in `src_dirs` source directories to an organized `dst_root` destination directory.
 
@@ -315,6 +315,7 @@ where `season` is `Spring`, `Summer`, `Fall` or `Winter` (depending of photo's d
 - `dst_root:String`: the destination directory of organized photos 
 - `rm_src::Bool`: delete source photos if true 
 - `dry_run::Bool`: if true then don't change anything, just print what would happen
+- `photo_suffix::String`: append string to end of filename (e.g. to show who it came from: "_Glen")
 
 # Examples
 ```julia-repl
