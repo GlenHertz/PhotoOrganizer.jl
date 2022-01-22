@@ -259,7 +259,7 @@ function report_missing(mount_stats::Vector{MountStat})
      for mount_stat in mount_stats
         src_dir = mount_stat.mount
         if !isdir(src_dir)
-           if src_dir == nothing
+           if isnothing(src_dir)
              @warn("Source directory doesn't exist, skipping: 'nothing'")
            else
              @warn("Source directory doesn't exist, skipping: $src_dir")
