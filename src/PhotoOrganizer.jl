@@ -116,7 +116,7 @@ function resolve_filetype(pic)
       end
 end
 
-function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run::Bool, suffix::String)
+function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run::Bool, suffix::String, rm_dst::Union{Regex,Nothing})
    album = Vector{Photo}()
    if !isdir(mount)
        @warn "Mount doesn't exist, skipping:" mount
@@ -215,7 +215,17 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
           end
       end
       backuped=false
-      if !isfile(dst) && !is_actual_dup
+      if !isnothing(rm_dst) && is_actual_dup && !isnothing(match(rm_dst, src))
+         #printstyled(" rm src $src", color=:red)
+         #if !dry_run
+         #   run(`rm $src`)
+         #end
+         printstyled(" rm dst $dst", color=:red)
+         if !dry_run
+            run(`rm $dst`)
+         end
+         backuped=false
+      elseif !isfile(dst) && !is_actual_dup
           printstyled(" cp $dst", color=:green)
           if !dry_run
               #try
@@ -235,11 +245,11 @@ function _organize_photos(mount::String, dst_root::String, rm_src::Bool, dry_run
       if rm_src
           print(" rm src")
           if !dry_run
-              #try
-                 rm(src)
-              #catch err
+              try
+                run(`rm $src`)
+              catch err
                  printstyled(" rm src failed: $err", bold=true, color=:red)
-              #end 
+              end 
           end
       end
       println()
@@ -300,7 +310,7 @@ function report_missing(mount_stats::Vector{MountStat})
 end
 
 """
-    organize_photos(src_dirs, dst_root; rm_src, dry_run, photo_suffix)
+    organize_photos(src_dirs, dst_root; rm_src, dry_run, photo_suffix, rm_dst)
 
 Move and rename photos in `src_dirs` source directories to an organized `dst_root` destination directory.
 
@@ -314,6 +324,7 @@ where `season` is `Spring`, `Summer`, `Fall` or `Winter` (depending of photo's d
 - `src_dirs::Vector{String}`: dirctories containing photos to organize
 - `dst_root:String`: the destination directory of organized photos 
 - `rm_src::Bool`: delete source photos if true 
+- `rm_dst::Regex`: delete destination photos if the source file matches this regex (to removes files added by accident) 
 - `dry_run::Bool`: if true then don't change anything, just print what would happen
 - `photo_suffix::String`: append string to end of filename (e.g. to show who it came from: "_Glen")
 
@@ -322,14 +333,14 @@ where `season` is `Spring`, `Summer`, `Fall` or `Winter` (depending of photo's d
 julia> organize_photos(["/home/hertz/Documents.local/Pictures"], "/home/hertz/Pictures/Pictures", rm_src=false, dry_run=true)
 ```
 """
-function organize_photos(src_dirs::Vector{String}, dst_root::String; rm_src::Bool, dry_run::Bool, photo_suffix="")
+function organize_photos(src_dirs::Vector{String}, dst_root::String; rm_src::Bool, dry_run::Bool, photo_suffix="", rm_dst::Union{Regex,Nothing}=nothing)
     if dry_run
        @warn("DRY RUN: only printing what would happen")
     end
     mount_stats = Vector{MountStat}()
     for dir in src_dirs
        mount_stat = MountStat(dir, Photo[])
-       for photo in _organize_photos(dir, dst_root, rm_src, dry_run, photo_suffix)
+       for photo in _organize_photos(dir, dst_root, rm_src, dry_run, photo_suffix, rm_dst)
           push!(mount_stat.photos, photo)
        end
        push!(mount_stats, mount_stat)
